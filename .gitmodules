@@ -1,3 +1,7 @@
 [submodule "themes/mainroad"]
 	path = themes/mainroad
 	url = https://github.com/vimux/mainroad
+[submodule "timmycarr.github.io"]
+	path = timmycarr.github.io
+	url = https://github.com/timmycarr/timmycarr.github.io.git
+	branch = master
