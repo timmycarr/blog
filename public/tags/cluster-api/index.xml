@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes" ?>
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
+  <channel>
+    <title>Cluster-API on timcarr.net</title>
+    <link>/tags/cluster-api/</link>
+    <description>Recent content in Cluster-API on timcarr.net</description>
+    <generator>Hugo -- gohugo.io</generator>
+    <language>en-us</language>
+    <lastBuildDate>Sun, 26 Jan 2020 23:38:58 -0600</lastBuildDate>
+    
+	<atom:link href="/tags/cluster-api/index.xml" rel="self" type="application/rss+xml" />
+    
+    
+    <item>
+      <title>Deploying HA Cluster-API-Provider-vSphere Kubernetes Clusters with CAPI version v1alpha2</title>
+      <link>/posts/cluster-api-vsphere-ha/</link>
+      <pubDate>Sun, 26 Jan 2020 23:38:58 -0600</pubDate>
+      
+      <guid>/posts/cluster-api-vsphere-ha/</guid>
+      <description>In this post I&amp;rsquo;ll cover standing up a v1alpha2 cluster-api-vsphere based HA cluster on vSphere 6.7U3. There are a lot of posts out there that talk about running Kubernetes on vSphere leveraging CAPV, but I&amp;rsquo;m unable to find anything that represents a more robust HA control-plane deployment. Like this:
+A NOTE: This guide is for v1alpha2 clusters. Currently work is being done in the cluster-api-provider-vsphere repository to enable v1alpha3 features.</description>
+    </item>
+    
+  </channel>
+</rss>

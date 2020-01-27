@@ -1,0 +1,575 @@
+<!DOCTYPE html>
+<html class="no-js" lang="en-us">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<meta http-equiv="X-UA-Compatible" content="IE=edge">
+	<title>Deploying HA Cluster-API-Provider-vSphere Kubernetes Clusters with CAPI version v1alpha2 - timcarr.net</title>
+	<script>(function(d,e){d[e]=d[e].replace("no-js","js");})(document.documentElement,"className");</script>
+	<meta name="description" content="">
+	<meta property="og:title" content="Deploying HA Cluster-API-Provider-vSphere Kubernetes Clusters with CAPI version v1alpha2" />
+<meta property="og:description" content="In this post I&rsquo;ll cover standing up a v1alpha2 cluster-api-vsphere based HA cluster on vSphere 6.7U3. There are a lot of posts out there that talk about running Kubernetes on vSphere leveraging CAPV, but I&rsquo;m unable to find anything that represents a more robust HA control-plane deployment. Like this:
+A NOTE: This guide is for v1alpha2 clusters. Currently work is being done in the cluster-api-provider-vsphere repository to enable v1alpha3 features." />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="/posts/cluster-api-vsphere-ha/" />
+<meta property="article:published_time" content="2020-01-26T23:38:58-06:00" />
+<meta property="article:modified_time" content="2020-01-26T23:38:58-06:00" />
+
+	<meta name="twitter:card" content="summary"/>
+<meta name="twitter:title" content="Deploying HA Cluster-API-Provider-vSphere Kubernetes Clusters with CAPI version v1alpha2"/>
+<meta name="twitter:description" content="In this post I&rsquo;ll cover standing up a v1alpha2 cluster-api-vsphere based HA cluster on vSphere 6.7U3. There are a lot of posts out there that talk about running Kubernetes on vSphere leveraging CAPV, but I&rsquo;m unable to find anything that represents a more robust HA control-plane deployment. Like this:
+A NOTE: This guide is for v1alpha2 clusters. Currently work is being done in the cluster-api-provider-vsphere repository to enable v1alpha3 features."/>
+
+	<link rel="dns-prefetch" href="//fonts.googleapis.com">
+	<link rel="dns-prefetch" href="//fonts.gstatic.com">
+	<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Open+Sans:400,400i,700">
+	<link rel="stylesheet" href="/css/style.css">
+	
+	<link rel="shortcut icon" href="/favicon.ico">
+		
+</head>
+<body class="body">
+	<div class="container container--outer">
+		<header class="header">
+	<div class="container">
+		<div class="logo">
+			<a class="logo__link" href="/" title="timcarr.net" rel="home">
+				<div class="logo__title">timcarr.net</div>
+				<div class="logo__tagline">...helping out with technical things</div>
+			</a>
+		</div>
+		<div class="divider"></div>
+	</div>
+</header>
+		<div class="wrapper flex">
+			<div class="primary">
+			
+<main class="main" role="main">
+	<article class="post">
+		<header class="post__header">
+			<h1 class="post__title">Deploying HA Cluster-API-Provider-vSphere Kubernetes Clusters with CAPI version v1alpha2</h1>
+			<div class="post__meta meta">
+<div class="meta__item-datetime meta__item">
+	<svg class="meta__icon icon icon-time" width="16" height="14" viewBox="0 0 30 28"><path d="M15 0C7 0 1 6 1 14s6 14 14 14 14-6 14-14S23 0 15 0zm0 25C9 25 4 20 4 14S9 3 15 3s11 5 11 11-5 11-11 11zm1-18h-2v8.4l6.8 4.4L22 18l-6-3.8V7z"/></svg>
+	<time class="meta__text" datetime="2020-01-26T23:38:58">01-26-2020</time>
+</div>
+</div>
+		</header><div class="content post__content clearfix">
+			
+
+<p>In this post I&rsquo;ll cover standing up a v1alpha2 cluster-api-vsphere based HA cluster on vSphere 6.7U3. There are a lot of posts out there that talk about running Kubernetes on vSphere leveraging CAPV, but I&rsquo;m unable to find anything that represents a more robust HA control-plane deployment. Like this:</p>
+
+<p><img src="https://i.imgur.com/4g8e4jN.png" alt="" /></p>
+
+<p>A NOTE: This guide is for v1alpha2 clusters. Currently work is being done in the cluster-api-provider-vsphere repository to enable v1alpha3 features. The master branch of the repository can be broken at times. I recommend <a href="https://github.com/kubernetes-sigs/cluster-api-provider-vsphere/releases">using the 0.5.4 release</a> which maps to v1alpha2 for stability&rsquo;s sake.</p>
+
+<h2 id="cluster-api-provider-vsphere-basics">Cluster API Provider vSphere basics</h2>
+
+<p>For those unfamiliar with cluster-api-vsphere, I recommend checking out the getting started guide from the <a href="https://github.com/kubernetes-sigs/cluster-api-provider-vsphere/blob/master/docs/getting_started.md">cluster-api-vsphere repository</a> For a higher level overview of CAPV review <a href="https://blogs.vmware.com/cloudnative/2019/12/12/how-cluster-api-promotes-self-service-infrastructure/">this blog by Chris Milstead</a> and <a href="https://theithollow.com/2019/11/04/clusterapi-demystified/">this blog by Eric Shanks</a>.</p>
+
+<p>As mentioned in Chris&rsquo; blog, an implementation of an initial Kubernetes control-plane node for vSphere requires <code>KubeadmConfig</code>, <code>Machine</code>, and <code>VSphereMachine</code> objects to be created in a cluster-api management cluster. A framework for creating these objects is provided by leveraging the <a href="https://github.com/kubernetes-sigs/cluster-api-provider-vsphere/blob/master/docs/getting_started.md">quickstart&rsquo;s documentation</a>. Nearly all posts stop here and move on to worker node <code>MachineDeployment</code> configuration. In this post, we&rsquo;ll cover what else is needed to deploy an HA control-plane.</p>
+
+<h2 id="what-s-needed-to-complete-the-ha-setup">What&rsquo;s needed to complete the HA setup?</h2>
+
+<p>To configure an HA control-plane, we&rsquo;ll add two additional control plane nodes and a load balancer. Here is a list of the changes needed:</p>
+
+<ol>
+<li>Two additional control plane nodes.</li>
+<li>A load balancer for the Kubernetes API server on each of the three control-plane nodes.</li>
+<li>Static IP&rsquo;s for your control plane nodes.</li>
+<li>KubeadmConfigs for the joining control plane nodes.</li>
+</ol>
+
+<h2 id="load-balancing">Load balancing</h2>
+
+<p>Kubernetes doesn&rsquo;t care about the load balancer in front of the api server, as long as it forwards TCP traffic to port 6443 (port can be altered to taste). In my lab, I&rsquo;m using Nginx to provide load balancing from a static IP address to static IP based control-plane nodes. The setup looks like this:</p>
+
+<p><img src="https://i.imgur.com/OF5VyZh.jpg" alt="" /></p>
+
+<p>My nginx.conf looks like this:</p>
+
+<pre><code>user nginx;
+worker_processes auto;
+error_log /var/log/nginx/error.log;
+pid /run/nginx.pid;
+
+# Load dynamic modules. See /usr/share/nginx/README.dynamic.
+include /usr/share/nginx/modules/*.conf;
+
+events {
+    worker_connections 1024;
+}
+
+stream {
+        upstream kube_api  {
+          server 192.168.10.31:6443;
+          server 192.168.10.32:6443;
+          server 192.168.10.33:6443;
+        }
+        server {
+          listen        6443;
+          proxy_pass    kube_api;
+        }
+}
+</code></pre>
+
+<p>To enable use of this load balancer configuration edits are needed to the controlplane.yaml as created by following the <a href="https://github.com/kubernetes-sigs/cluster-api-provider-vsphere/blob/master/docs/getting_started.md#managing-workload-clusters-using-the-management-cluster">instructions here</a> Edit the <code>KubeadmConfig</code> of the controlplane.yaml:
+1. Add apiServerCertSANS to the clusterConfiguration spec
+2. Add a controlPlaneEndpoint to the clusterConfiguration spec</p>
+
+<p>Both should be configured to leverage the IP and port of the load balancer configured to support the control-plane. An example of this full configuration from my lab is below:</p>
+
+<pre><code>apiVersion: bootstrap.cluster.x-k8s.io/v1alpha2
+kind: KubeadmConfig
+metadata:
+  name: capv-5-controlplane-0
+  namespace: default
+spec:
+  clusterConfiguration:
+    apiServer:
+      extraArgs:
+        cloud-provider: external
+    apiServerCertSANS:
+    - 192.168.10.18
+    controllerManager:
+      extraArgs:
+        cloud-provider: external
+    controlPlaneEndpoint: 192.168.10.18:6443
+    imageRepository: k8s.gcr.io
+  initConfiguration:
+    nodeRegistration:
+      criSocket: /var/run/containerd/containerd.sock
+      kubeletExtraArgs:
+        cloud-provider: external
+      name: '{{ ds.meta_data.hostname }}'
+  preKubeadmCommands:
+  - hostname &quot;{{ ds.meta_data.hostname }}&quot;
+  - echo &quot;::1         ipv6-localhost ipv6-loopback&quot; &gt;/etc/hosts
+  - echo &quot;127.0.0.1   localhost {{ ds.meta_data.hostname }}&quot; &gt;&gt;/etc/hosts
+  - echo &quot;{{ ds.meta_data.hostname }}&quot; &gt;/etc/hostname
+  users:
+  - name: capv
+    sshAuthorizedKeys:
+    - &quot;The public side of an SSH key pair.&quot;
+    sudo: ALL=(ALL) NOPASSWD:ALL
+</code></pre>
+
+<h2 id="control-plane-node-static-ip-assignment">Control-Plane Node Static IP Assignment</h2>
+
+<p>I&rsquo;m using Ubuntu images in my lab as I found some open GitHub issues that referenced static IP configuration problems in CentOS related to the upstream <a href="https://github.com/kubernetes-sigs/image-builder">image-builder</a> tooling for kubernetes. If you&rsquo;re new to the Kubernetes space on vSphere and can use Ubuntu my recommendation would be do so for now.</p>
+
+<p>To configure static IP&rsquo;s for control plane nodes edit the related <code>VSphereMachine</code> network spec setting dhcp4 to false, adding gateway4, ipAddrs, nameservers, and searchDomains. Here&rsquo;s how this section of my controlplane.yaml ends up looking:</p>
+
+<pre><code>---
+apiVersion: infrastructure.cluster.x-k8s.io/v1alpha2
+kind: VSphereMachine
+metadata:
+  labels:
+    cluster.x-k8s.io/cluster-name: management-cluster
+    cluster.x-k8s.io/control-plane: &quot;true&quot;
+  name: capv-5-cluster-controlplane-0
+  namespace: default
+spec:
+  datacenter: lab
+  diskGiB: 50
+  memoryMiB: 4096
+  network:
+    devices:
+    - dhcp4: false
+      dhcp6: false
+      gateway4: 192.168.10.1
+      ipAddrs:
+      - 192.168.10.31/24
+      nameservers:
+      - 192.168.10.50
+      - 192.168.10.51
+      networkName: management
+      searchDomains: 
+      - timcarr.net
+  numCPUs: 4
+  template: ubuntu-1804-kube-v1.16.3
+</code></pre>
+
+<p>Your controlplane.yaml file should include configurations for <code>Machine</code>, <code>VSphereMachine</code>, and the updated <code>KubeadmConfig</code>. These three configurations define a how the single controlplane-0 VM are configured in vSphere (<code>Machine</code> and <code>VSphereMachine</code>), and bootstrapped (<code>KubeadmConfig</code>) in Kubernetes leveraging our external load balancer. Applying this configuration to your CAPV enabled management cluster should provision that single node.</p>
+
+<h2 id="adding-additional-control-plane-nodes">Adding Additional Control Plane Nodes</h2>
+
+<p>For each of the additional two control-plane nodes, <code>Machine</code>,<code>VSphereMachine</code>, and <code>KubeadmConfig</code> specifying a <code>joinConfiguration</code> objects are needed.</p>
+
+<h3 id="machine-settings"><code>Machine</code> settings</h3>
+
+<p>Each control-plane <code>machine</code> configuration needs to contain a label <code>cluster.x-k8s.io/control-plane: &quot;true&quot;</code> that informs cluster-api that the machine specified is a part of the referenced cluster&rsquo;s control-plane. You&rsquo;ll also note that the <code>Machine</code> object references bootstrap (<code>KubeadmConfig</code>) and infrastructure (<code>VSphereMachine</code>) objects. Here&rsquo;s an example from my controlplane.yaml file including the needed label:</p>
+
+<pre><code>---
+apiVersion: cluster.x-k8s.io/v1alpha2
+kind: Machine
+metadata:
+  labels:
+    cluster.x-k8s.io/cluster-name: capv-5
+    cluster.x-k8s.io/control-plane: &quot;true&quot;
+  name: capv-5-controlplane-1
+  namespace: default
+spec:
+  bootstrap:
+    configRef:
+      apiVersion: bootstrap.cluster.x-k8s.io/v1alpha2
+      kind: KubeadmConfig
+      name: capv-5-controlplane-1
+      namespace: default
+  infrastructureRef:
+    apiVersion: infrastructure.cluster.x-k8s.io/v1alpha2
+    kind: VSphereMachine
+    name: capv-5-controlplane-1
+    namespace: default
+  version: 1.16.3
+</code></pre>
+
+<h3 id="vspheremachine-settings"><code>VSphereMachine</code> settings</h3>
+
+<p>Each<code>VSphereMachine</code> configuration requires same <code>cluster.x-k8s.io/control-plane: &quot;true&quot;</code> as well as changes to specify a static IP. Here&rsquo;s an example from my controlplane.yaml file:</p>
+
+<pre><code>apiVersion: infrastructure.cluster.x-k8s.io/v1alpha2
+kind: VSphereMachine
+metadata:
+  labels:
+    cluster.x-k8s.io/cluster-name: capv-5
+    cluster.x-k8s.io/control-plane: &quot;true&quot;
+  name: capv-5-controlplane-1
+  namespace: default
+spec:
+  datacenter: lab
+  diskGiB: 50
+  memoryMiB: 2048
+  network:
+    devices:
+    - dhcp4: false
+      dhcp6: false
+      gateway4: 192.168.10.1
+      ipAddrs:
+      - 192.168.10.32/24
+      nameservers:
+      - 192.168.10.50
+      - 192.168.10.51
+      networkName: management
+      searchDomains: 
+      - timcarr.net
+  numCPUs: 2
+  template: ubuntu-1804-kube-v1.16.3
+</code></pre>
+
+<h3 id="kubeadmconfig-settings"><code>KubeadmConfig</code> settings</h3>
+
+<p>The <code>KubeadmConfig</code> setting here differs from the initial configuration for control-plane-0 as it just tells subsequent nodes that they should join the cluster using the included <code>joinConfiguration</code>. Here is an example of my configuration.</p>
+
+<pre><code>---
+apiVersion: bootstrap.cluster.x-k8s.io/v1alpha2
+kind: KubeadmConfig
+metadata:
+  name: capv-5-controlplane-1
+  namespace: default
+spec:
+  joinConfiguration:
+    nodeRegistration:
+      criSocket: /var/run/containerd/containerd.sock
+      kubeletExtraArgs:
+        cloud-provider: external
+      name: '{{ ds.meta_data.hostname }}'
+  preKubeadmCommands:
+  - hostname &quot;{{ ds.meta_data.hostname }}&quot;
+  - echo &quot;::1         ipv6-localhost ipv6-loopback&quot; &gt;/etc/hosts
+  - echo &quot;127.0.0.1   localhost {{ ds.meta_data.hostname }}&quot; &gt;&gt;/etc/hosts
+  - echo &quot;{{ ds.meta_data.hostname }}&quot; &gt;/etc/hostname
+  users:
+  - name: capv
+    sshAuthorizedKeys:
+    - &quot;The public side of an SSH key pair.&quot;
+    sudo: ALL=(ALL) NOPASSWD:ALL
+</code></pre>
+
+<h2 id="wrapping-it-up">Wrapping it up.</h2>
+
+<p>At this point you should be able to copy the exact same settings above and modify the names in the configuration files and IP addresses to provide a third node.</p>
+
+<p>Here&rsquo;s a final version of my controlplane.yaml with all of these objects defined omitting my public SSH key:</p>
+
+<pre><code>apiVersion: bootstrap.cluster.x-k8s.io/v1alpha2
+kind: KubeadmConfig
+metadata:
+  name: capv-5-controlplane-0
+  namespace: default
+spec:
+  clusterConfiguration:
+    apiServer:
+      extraArgs:
+        cloud-provider: external
+    apiServerCertSANS:
+    - 192.168.10.18
+    controllerManager:
+      extraArgs:
+        cloud-provider: external
+    controlPlaneEndpoint: 192.168.10.18:6443
+    imageRepository: k8s.gcr.io
+  initConfiguration:
+    nodeRegistration:
+      criSocket: /var/run/containerd/containerd.sock
+      kubeletExtraArgs:
+        cloud-provider: external
+      name: '{{ ds.meta_data.hostname }}'
+  preKubeadmCommands:
+  - hostname &quot;{{ ds.meta_data.hostname }}&quot;
+  - echo &quot;::1         ipv6-localhost ipv6-loopback&quot; &gt;/etc/hosts
+  - echo &quot;127.0.0.1   localhost {{ ds.meta_data.hostname }}&quot; &gt;&gt;/etc/hosts
+  - echo &quot;{{ ds.meta_data.hostname }}&quot; &gt;/etc/hostname
+  users:
+  - name: capv
+    sshAuthorizedKeys:
+    - &quot;The public side of an SSH key pair.&quot;
+    sudo: ALL=(ALL) NOPASSWD:ALL
+---
+apiVersion: cluster.x-k8s.io/v1alpha2
+kind: Machine
+metadata:
+  labels:
+    cluster.x-k8s.io/cluster-name: capv-5
+    cluster.x-k8s.io/control-plane: &quot;true&quot;
+  name: capv-5-controlplane-0
+  namespace: default
+spec:
+  bootstrap:
+    configRef:
+      apiVersion: bootstrap.cluster.x-k8s.io/v1alpha2
+      kind: KubeadmConfig
+      name: capv-5-controlplane-0
+      namespace: default
+  infrastructureRef:
+    apiVersion: infrastructure.cluster.x-k8s.io/v1alpha2
+    kind: VSphereMachine
+    name: capv-5-controlplane-0
+    namespace: default
+  version: 1.16.3
+---
+apiVersion: infrastructure.cluster.x-k8s.io/v1alpha2
+kind: VSphereMachine
+metadata:
+  labels:
+    cluster.x-k8s.io/cluster-name: capv-5
+    cluster.x-k8s.io/control-plane: &quot;true&quot;
+  name: capv-5-controlplane-0
+  namespace: default
+spec:
+  datacenter: lab
+  diskGiB: 50
+  memoryMiB: 2048
+  network:
+    devices:
+    - dhcp4: false
+      dhcp6: false
+      gateway4: 192.168.10.1
+      ipAddrs:
+      - 192.168.10.31/24
+      nameservers:
+      - 192.168.10.50
+      - 192.168.10.51
+      networkName: management
+      searchDomains: 
+      - timcarr.net
+  numCPUs: 2
+  template: ubuntu-1804-kube-v1.16.3
+---
+apiVersion: bootstrap.cluster.x-k8s.io/v1alpha2
+kind: KubeadmConfig
+metadata:
+  name: capv-5-controlplane-1
+  namespace: default
+spec:
+  joinConfiguration:
+    nodeRegistration:
+      criSocket: /var/run/containerd/containerd.sock
+      kubeletExtraArgs:
+        cloud-provider: external
+      name: '{{ ds.meta_data.hostname }}'
+  preKubeadmCommands:
+  - hostname &quot;{{ ds.meta_data.hostname }}&quot;
+  - echo &quot;::1         ipv6-localhost ipv6-loopback&quot; &gt;/etc/hosts
+  - echo &quot;127.0.0.1   localhost {{ ds.meta_data.hostname }}&quot; &gt;&gt;/etc/hosts
+  - echo &quot;{{ ds.meta_data.hostname }}&quot; &gt;/etc/hostname
+  users:
+  - name: capv
+    sshAuthorizedKeys:
+    - &quot;The public side of an SSH key pair.&quot;
+    sudo: ALL=(ALL) NOPASSWD:ALL
+---
+apiVersion: cluster.x-k8s.io/v1alpha2
+kind: Machine
+metadata:
+  labels:
+    cluster.x-k8s.io/cluster-name: capv-5
+    cluster.x-k8s.io/control-plane: &quot;true&quot;
+  name: capv-5-controlplane-1
+  namespace: default
+spec:
+  bootstrap:
+    configRef:
+      apiVersion: bootstrap.cluster.x-k8s.io/v1alpha2
+      kind: KubeadmConfig
+      name: capv-5-controlplane-1
+      namespace: default
+  infrastructureRef:
+    apiVersion: infrastructure.cluster.x-k8s.io/v1alpha2
+    kind: VSphereMachine
+    name: capv-5-controlplane-1
+    namespace: default
+  version: 1.16.3
+---
+apiVersion: infrastructure.cluster.x-k8s.io/v1alpha2
+kind: VSphereMachine
+metadata:
+  labels:
+    cluster.x-k8s.io/cluster-name: capv-5
+    cluster.x-k8s.io/control-plane: &quot;true&quot;
+  name: capv-5-controlplane-1
+  namespace: default
+spec:
+  datacenter: lab
+  diskGiB: 50
+  memoryMiB: 2048
+  network:
+    devices:
+    - dhcp4: false
+      dhcp6: false
+      gateway4: 192.168.10.1
+      ipAddrs:
+      - 192.168.10.32/24
+      nameservers:
+      - 192.168.10.50
+      - 192.168.10.51
+      networkName: management
+      searchDomains: 
+      - timcarr.net
+  numCPUs: 2
+  template: ubuntu-1804-kube-v1.16.3
+---
+apiVersion: bootstrap.cluster.x-k8s.io/v1alpha2
+kind: KubeadmConfig
+metadata:
+  name: capv-5-controlplane-2
+  namespace: default
+spec:
+  joinConfiguration:
+    nodeRegistration:
+      criSocket: /var/run/containerd/containerd.sock
+      kubeletExtraArgs:
+        cloud-provider: external
+      name: '{{ ds.meta_data.hostname }}'
+  preKubeadmCommands:
+  - hostname &quot;{{ ds.meta_data.hostname }}&quot;
+  - echo &quot;::1         ipv6-localhost ipv6-loopback&quot; &gt;/etc/hosts
+  - echo &quot;127.0.0.1   localhost {{ ds.meta_data.hostname }}&quot; &gt;&gt;/etc/hosts
+  - echo &quot;{{ ds.meta_data.hostname }}&quot; &gt;/etc/hostname
+  users:
+  - name: capv
+    sshAuthorizedKeys:
+    - &quot;The public side of an SSH key pair.&quot;
+    sudo: ALL=(ALL) NOPASSWD:ALL
+---
+apiVersion: cluster.x-k8s.io/v1alpha2
+kind: Machine
+metadata:
+  labels:
+    cluster.x-k8s.io/cluster-name: capv-5
+    cluster.x-k8s.io/control-plane: &quot;true&quot;
+  name: capv-5-controlplane-2
+  namespace: default
+spec:
+  bootstrap:
+    configRef:
+      apiVersion: bootstrap.cluster.x-k8s.io/v1alpha2
+      kind: KubeadmConfig
+      name: capv-5-controlplane-2
+      namespace: default
+  infrastructureRef:
+    apiVersion: infrastructure.cluster.x-k8s.io/v1alpha2
+    kind: VSphereMachine
+    name: capv-5-controlplane-2
+    namespace: default
+  version: 1.16.3
+---
+apiVersion: infrastructure.cluster.x-k8s.io/v1alpha2
+kind: VSphereMachine
+metadata:
+  labels:
+    cluster.x-k8s.io/cluster-name: capv-5
+    cluster.x-k8s.io/control-plane: &quot;true&quot;
+  name: capv-5-controlplane-2
+  namespace: default
+spec:
+  datacenter: lab
+  diskGiB: 50
+  memoryMiB: 2048
+  network:
+    devices:
+    - dhcp4: false
+      dhcp6: false
+      gateway4: 192.168.10.1
+      ipAddrs:
+      - 192.168.10.33/24
+      nameservers:
+      - 192.168.10.50
+      - 192.168.10.51
+      networkName: management
+      searchDomains: 
+      - timcarr.net
+  numCPUs: 2
+  template: ubuntu-1804-kube-v1.16.3
+</code></pre>
+
+<p>In the end your vSphere environment should look like this:
+<img src="https://i.imgur.com/rzjjFjs.png" alt="" /></p>
+
+<p>One final note. I&rsquo;ve setup my lab to ensure that my management VM has a static IP - you should know how to do that now! Hope this helps everyone looking to <a href="https://github.com/kubernetes-sigs/cluster-api-provider-vsphere/blob/master/docs/getting_started.md">get started</a> with <a href="https://github.com/kubernetes-sigs/cluster-api-provider-vsphere">Cluster-API-Provider-vSphere</a>.</p>
+
+		</div>
+		<footer class="post__footer">
+			
+<div class="post__tags tags clearfix">
+	<svg class="tags__badge icon icon-tag" width="16" height="16" viewBox="0 0 32 32"><path d="M32 19c0 1-1 2-1 2L21 31s-1 1-2 1-2-1-2-1L2 16c-1-1-1.4-2-1.4-2S0 12.5 0 11V3C0 1.5.8.8.8.8S1.5 0 3 0h8c1.5 0 3 .6 3 .6S15 1 16 2l15 15s1 1 1 2zM7 10a3 3 0 1 0 0-6 3 3 0 0 0 0 6z"/></svg>
+	<ul class="tags__list">
+		<li class="tags__item"><a class="tags__link btn" href="/tags/capv/" rel="tag">CAPV</a></li>
+		<li class="tags__item"><a class="tags__link btn" href="/tags/cluster-api/" rel="tag">Cluster-API</a></li>
+		<li class="tags__item"><a class="tags__link btn" href="/tags/kubernetes/" rel="tag">Kubernetes</a></li>
+	</ul>
+</div>
+		</footer>
+	</article>
+</main>
+
+<div class="authorbox clearfix">
+	<figure class="authorbox__avatar">
+		<img alt="Tim Carr avatar" src="/img/headshot.jpeg" class="avatar" height="90" width="90">
+	</figure>
+	<div class="authorbox__header">
+		<span class="authorbox__name">About Tim Carr</span>
+	</div>
+	<div class="authorbox__description">
+		Tim Carr is a Cloud Native Field Engineer with VMware
+	</div>
+</div>
+
+
+
+			</div>
+			
+		</div>
+		<footer class="footer">
+	<div class="container footer__container flex">
+		
+		<div class="footer__copyright">
+			&copy; 2020 Tim Carr.
+			<span class="footer__copyright-credits">Generated with <a href="https://gohugo.io/" rel="nofollow noopener" target="_blank">Hugo</a> and <a href="https://github.com/Vimux/Mainroad/" rel="nofollow noopener" target="_blank">Mainroad</a> theme.</span>
+		</div>
+	</div>
+</footer>
+	</div>
+<script async defer src="/js/menu.js"></script>
+</body>
+</html>
