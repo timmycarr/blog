@@ -36,8 +36,8 @@ googleAnalytics = "" # Enable Google Analytics by entering your tracking id
   list = "left"  # Configure layout for list pages
   single = false # Configure layout for single pages
   # Enable widgets in given order
-  widgets = ["search", "recent", "categories", "taglist", "social", "languages"]
-
+#  widgets = ["search", "recent", "categories", "taglist", "social", "languages"]
+  widgets = ["recent", "categories", "taglist", "social", "languages"]
 [Params.widgets]
   recent_num = 5 # Set the number of articles in the "Recent articles" widget
   tags_counter = false # Enable counter for each tag in "Tags" widget
@@ -45,9 +45,9 @@ googleAnalytics = "" # Enable Google Analytics by entering your tracking id
 [Params.widgets.social]
   # Enable parts of social widget
   twitter = "timmycarr"
-  linkedin = "timmycarr"
+#  linkedin = "timmycarr"
   github = "timmycarr"
-  email = "tim@timcarr.net"
+#  email = "tim@timcarr.net"
 
 # Custom social links
 #[[Params.widgets.social.custom]]
@@ -55,6 +55,6 @@ googleAnalytics = "" # Enable Google Analytics by entering your tracking id
 #  url = "https://youtube.com/user/username"
 #  icon = "youtube.svg" # Optional. Path relative to "layouts/partials"
 
-[[Params.widgets.social.custom]]
-  title = "My Home Page"
-  url = "http://timcarr.net"
+#[[Params.widgets.social.custom]]
+#  title = "My Home Page"
+#  url = "http://timcarr.net"
