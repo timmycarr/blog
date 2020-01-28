@@ -80,12 +80,12 @@ spec:
     apiServer:
       extraArgs:
         cloud-provider: external
-    apiServerCertSANS:
-    - 192.168.10.18
+    apiServerCertSANS:                                # Add the apiServerCertSANS
+    - 192.168.10.18                                   # Specify an IP address
     controllerManager:
       extraArgs:
         cloud-provider: external
-    controlPlaneEndpoint: 192.168.10.18:6443
+    controlPlaneEndpoint: 192.168.10.18:6443          # Load balancer IP address goes here
     imageRepository: k8s.gcr.io
   initConfiguration:
     nodeRegistration:
@@ -126,17 +126,17 @@ spec:
   memoryMiB: 4096
   network:
     devices:
-    - dhcp4: false
-      dhcp6: false
-      gateway4: 192.168.10.1
+    - dhcp4: false                                  # Update this to false
+      dhcp6: false                                  
+      gateway4: 192.168.10.1                        # Add a gateway
       ipAddrs:
-      - 192.168.10.31/24
-      nameservers:
-      - 192.168.10.50
-      - 192.168.10.51
+      - 192.168.10.31/24                            # Specify an IP address
+      nameservers:                                  # Add nameservers
+      - 192.168.10.50                               # nameserver IP
+      - 192.168.10.51                               # nameserver IP
       networkName: management
-      searchDomains: 
-      - timcarr.net
+      searchDomains:                                # add searchDomains
+      - timcarr.net                                 # provide a serch domain
   numCPUs: 4
   template: ubuntu-1804-kube-v1.16.3
 ```
@@ -155,16 +155,16 @@ apiVersion: cluster.x-k8s.io/v1alpha2
 kind: Machine
 metadata:
   labels:
-    cluster.x-k8s.io/cluster-name: capv-5
-    cluster.x-k8s.io/control-plane: "true"
-  name: capv-5-controlplane-1
+    cluster.x-k8s.io/cluster-name: capv-5               
+    cluster.x-k8s.io/control-plane: "true"            # Add control-plane line here
+  name: capv-5-controlplane-1                         # Note that we're creating a new machine
   namespace: default
 spec:
   bootstrap:
     configRef:
       apiVersion: bootstrap.cluster.x-k8s.io/v1alpha2
       kind: KubeadmConfig
-      name: capv-5-controlplane-1
+      name: capv-5-controlplane-1              
       namespace: default
   infrastructureRef:
     apiVersion: infrastructure.cluster.x-k8s.io/v1alpha2
@@ -182,7 +182,7 @@ kind: VSphereMachine
 metadata:
   labels:
     cluster.x-k8s.io/cluster-name: capv-5
-    cluster.x-k8s.io/control-plane: "true"
+    cluster.x-k8s.io/control-plane: "true"          # Add control-plane line here
   name: capv-5-controlplane-1
   namespace: default
 spec:
@@ -191,17 +191,17 @@ spec:
   memoryMiB: 2048
   network:
     devices:
-    - dhcp4: false
-      dhcp6: false
-      gateway4: 192.168.10.1
+    - dhcp4: false                                  # Update this to false
+      dhcp6: false                                  
+      gateway4: 192.168.10.1                        # Add a gateway
       ipAddrs:
-      - 192.168.10.32/24
-      nameservers:
-      - 192.168.10.50
-      - 192.168.10.51
+      - 192.168.10.32/24                            # Specify an IP address
+      nameservers:                                  # Add nameservers
+      - 192.168.10.50                               # nameserver IP
+      - 192.168.10.51                               # nameserver IP
       networkName: management
-      searchDomains: 
-      - timcarr.net
+      searchDomains:                                # add searchDomains
+      - timcarr.net                                 # provide a serch domain
   numCPUs: 2
   template: ubuntu-1804-kube-v1.16.3
 ```
@@ -215,7 +215,7 @@ metadata:
   name: capv-5-controlplane-1
   namespace: default
 spec:
-  joinConfiguration:
+  joinConfiguration:                                  # Note the joinConfiguration here
     nodeRegistration:
       criSocket: /var/run/containerd/containerd.sock
       kubeletExtraArgs:
@@ -232,6 +232,15 @@ spec:
     - "The public side of an SSH key pair."
     sudo: ALL=(ALL) NOPASSWD:ALL
 ```
+## All of these configuration settings are great, but how do I find them?
+
+Actually this is somewhat of a complicated process at the moment. I'll help by pointing out the v1alpha2 types available within the code on GitHub. Opening the cluster-api-vsphere GitHub repository and clicking api and then v1alpha2 folders reveals the following types.go file:
+
+![](https://i.imgur.com/wlpmQGq.png)
+
+Within that file, we're able to review all of the configuration options that we are able to define for our virtual machine's networking configuration:
+
+![](https://i.imgur.com/gosOUIR.png)
 
 ## Wrapping it up.
 
