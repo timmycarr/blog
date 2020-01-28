@@ -6,7 +6,7 @@ tags:
   - "Cluster-API"
   - "Kubernetes" 
 draft: false
-thumbnail: "img/capi.png"
+thumbnail: "img/capi.jpeg"
 toc: false
 ---
 
