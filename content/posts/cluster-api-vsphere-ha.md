@@ -64,6 +64,7 @@ stream {
 ```
 
 To enable use of this load balancer configuration edits are needed to the controlplane.yaml as created by following the [instructions here](https://github.com/kubernetes-sigs/cluster-api-provider-vsphere/blob/master/docs/getting_started.md#managing-workload-clusters-using-the-management-cluster) Edit the `KubeadmConfig` of the controlplane.yaml:
+
 1. Add apiServerCertSANS to the clusterConfiguration spec
 2. Add a controlPlaneEndpoint to the clusterConfiguration spec 
 
